@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Scène 3D</title>
+<style>
+  :root { --bg: #F6F4F1; --card: #FFFFFF; --ink: #1D1C1D; --soft: #6B6A6B; --line: #E2DFDA; --accent: #4A154B; --err: #B42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #18171A; --card: #222125; --ink: #F2F0EE; --soft: #A6A3A0; --line: #34323A; --accent: #C59BD0; --err: #F97066; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 16px; }
+  form { width: 100%; max-width: 360px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 28px 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p { margin: 0 0 20px; color: var(--soft); font-size: 14px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  input { width: 100%; font: inherit; padding: 11px 12px; border-radius: 9px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { margin-top: 14px; width: 100%; font: inherit; font-weight: 700; padding: 11px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; cursor: pointer; }
+  @media (prefers-color-scheme: dark) { button { color: #18171A; } }
+  button:disabled { opacity: .6; cursor: wait; }
+  .msg { min-height: 20px; margin-top: 12px; font-size: 14px; color: var(--soft); }
+  .msg.err { color: var(--err); }
+</style>
+</head>
+<body>
+<form id="f" autocomplete="on">
+  <h1>Scène 3D</h1>
+  <p>Page privée. Tout est chiffré : sans le mot de passe, rien ne se lit.</p>
+  <label for="pw">Mot de passe</label>
+  <input id="pw" type="password" autocomplete="current-password" required autofocus>
+  <button id="go" type="submit">Entrer</button>
+  <div class="msg" id="msg" role="status"></div>
+</form>
+<script>
+const SALT = "fxtMEhK8DinuW3+s202j+g==", ITER = 310000;
+const $ = id => document.getElementById(id), msg = (t, err) => { $("msg").textContent = t; $("msg").className = "msg" + (err ? " err" : ""); };
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const idb = () => new Promise((ok, ko) => { const r = indexedDB.open("scene3d", 1); r.onupgradeneeded = () => r.result.createObjectStore("k"); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); });
+async function putKey(k) { const db = await idb(); await new Promise((ok, ko) => { const t = db.transaction("k", "readwrite"); t.objectStore("k").put(k, "key"); t.oncomplete = ok; t.onerror = () => ko(t.error); }); }
+async function derive(pw) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(SALT), iterations: ITER, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+}
+async function check(key) {
+  const b = new Uint8Array(await (await fetch("d/manifest.bin", { cache: "no-cache" })).arrayBuffer());
+  await crypto.subtle.decrypt({ name: "AES-GCM", iv: b.slice(0, 12) }, key, b.slice(12));
+}
+async function swReady() {
+  if (!("serviceWorker" in navigator)) throw new Error("nosw");
+  const reg = await navigator.serviceWorker.register("sw.js", { scope: "./" });
+  await navigator.serviceWorker.ready;
+  if (reg.active) reg.active.postMessage("reset");
+}
+$("f").addEventListener("submit", async e => {
+  e.preventDefault(); $("go").disabled = true; msg("Vérification…");
+  try {
+    const key = await derive($("pw").value);
+    try { await check(key); } catch (err) { msg("Mot de passe incorrect.", true); $("go").disabled = false; return; }
+    await putKey(key); msg("Ouverture de la scène…");
+    await swReady(); location.href = "app/";
+  } catch (err) {
+    msg(err && err.message === "nosw" ? "Ce navigateur ne permet pas d'ouvrir la page (navigation privée ?)." : "Impossible d'ouvrir la page : " + (err && err.message || err), true);
+    $("go").disabled = false;
+  }
+});
+</script>
+</body>
+</html>
