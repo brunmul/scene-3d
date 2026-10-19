@@ -33,7 +33,7 @@
   <div class="msg" id="msg" role="status"></div>
 </form>
 <script>
-const SALT = "fxtMEhK8DinuW3+s202j+g==", ITER = 310000;
+const SALT = "36tYlECZviF+15cdmkxI5Q==", ITER = 310000;
 const $ = id => document.getElementById(id), msg = (t, err) => { $("msg").textContent = t; $("msg").className = "msg" + (err ? " err" : ""); };
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const idb = () => new Promise((ok, ko) => { const r = indexedDB.open("scene3d", 1); r.onupgradeneeded = () => r.result.createObjectStore("k"); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); });
